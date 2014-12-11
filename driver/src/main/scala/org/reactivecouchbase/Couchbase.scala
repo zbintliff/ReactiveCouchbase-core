@@ -70,7 +70,7 @@ class CouchbaseBucket( private[reactivecouchbase] val cbDriver: ReactiveCouchbas
 
     // Sets the metric Collector, ths class must extent AbstractMetricCollector
     cbDriver.configuration.getString("couchbase.driver.native.setMetricCollector").foreach( x => {
-      cfb.setMetricCollector(Class.forName(x).newInstance().asInstanceOf[AbstractMetricCollector]);
+      cfb.setMetricCollector(Class.forName(x).newInstance().asInstanceOf[AbstractMetricCollector])
     })
 
     // SInce MetricType is an enum it iteratetes through possible values and sets the correct MetricType

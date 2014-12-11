@@ -1,5 +1,6 @@
 package org.reactivecouchbase.experimental
 
+import com.couchbase.client.http.HttpUtil
 import com.ning.http.client.{Response, AsyncCompletionHandler}
 import com.couchbase.client.protocol.views.{Query, View}
 import org.reactivecouchbase.CouchbaseBucket
@@ -103,10 +104,12 @@ object Views {
    * @param ec the ExecutionContext used for async processing
    * @return the future JsArray result
    */
+  var counter = 0
   private[experimental] def __internalViewQuery(view: View, query: Query)(implicit bucket: CouchbaseBucket, ec: ExecutionContext): Future[JsArray] = {
-    val url = s"http://${bucket.hosts.head}:8092${view.getURI}${query.toString}&include_docs=${query.willIncludeDocs()}"
+    val url = s"http://${bucket.hosts.toArray.apply(counter % bucket.hosts.size)}:8092${view.getURI}${query.toString}&include_docs=${query.willIncludeDocs()}"
+    counter = counter + 1
     val promise = Promise[String]()
-    bucket.httpClient.prepareGet(url).execute(new AsyncCompletionHandler[Response]() {
+    lazy val responseHandler = new AsyncCompletionHandler[Response]() {
       override def onCompleted(response: Response) = {
         if (response.getStatusCode != 200) {
           promise.failure(new ReactiveCouchbaseException("Error", s"Couchbase responded with status '${response.getStatusCode}' : ${response.getResponseBody}"))
@@ -118,9 +121,16 @@ object Views {
       override def onThrowable(t: Throwable) = {
         promise.failure(t)
       }
-    })
-    promise.future.map(body => (Json.parse(body) \ "rows").as[JsArray])
+    }
+    if (bucket.user != null) {
+      bucket.httpClient.prepareGet(url).addHeader("Authorization", HttpUtil.buildAuthHeader(bucket.user, bucket.pass)).execute(responseHandler)
+      promise.future.map(body => (Json.parse(body) \ "rows").as[JsArray])
+    } else {
+      bucket.httpClient.prepareGet(url).execute(responseHandler)
+      promise.future.map(body => (Json.parse(body) \ "rows").as[JsArray])
+    }
   }
+
 
   /**
    *
